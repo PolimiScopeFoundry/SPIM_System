@@ -4,11 +4,16 @@ SPIM App
 @authors: Emma Martinelli, Andrea Bassi. Politecnico di Milano
 
 '''
-import sys
-from os.path import dirname
-sys.path.append(dirname(dirname(__file__)))
-
 from ScopeFoundry import BaseMicroscopeApp
+
+def add_path(path):
+    import sys
+    import os
+    # add path to ospath list, assuming that the path is in a sybling folder
+    from os.path import dirname
+    sys.path.append(os.path.abspath(os.path.join(dirname(dirname(__file__)),path)))
+
+
 
 SERIAL = {'M-403.4DG': '0115500028',  # SPIM translator stage
           'V-524.1AA': '0119024343',  # voice coil
@@ -22,15 +27,18 @@ class SPIM_app(BaseMicroscopeApp):
         #Add hardware components
 
         print("Adding Camera Hardware Components")
-        from NAC_ScopeFoundry.NAC_hw import NeoAndorHW
+        add_path('NAC_ScopeFoundry')
+        from NAC_hw import NeoAndorHW
         self.add_hardware(NeoAndorHW(self))
 
         print("Adding Shutter Hardware Components")
-        from Shutter_ScopeFoundry.shutter_hw import ShutterHW
+        add_path('Shutter_ScopeFoundry')
+        from shutter_hw import ShutterHW
         self.add_hardware(ShutterHW(self))
 
         print("Adding Translator Hardware Components")
-        from PI_ScopeFoundry.PI_CG_hardware import PI_CG_HW
+        add_path('PI_ScopeFoundry')
+        from PI_CG_hardware import PI_CG_HW
         self.add_hardware(PI_CG_HW(self, serial='0115500028'))
          
         # Add measurement components
@@ -41,7 +49,6 @@ class SPIM_app(BaseMicroscopeApp):
 if __name__ == '__main__':
     import sys
     import os
-
     app = SPIM_app(sys.argv)
 
     # current file dir and select settings file:

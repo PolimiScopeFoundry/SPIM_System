@@ -69,7 +69,7 @@ class SpimMeasure(Measurement):
 
 
         self.settings.mip_type.connect_to_widget(self.ui.mip_selector)
-        self.settings.save_type.connect_to_widget(self.ui.comboBox) #TODO verify
+        self.settings.save_type.connect_to_widget(self.ui.save_selector)
 
         # Set up pyqtgraph graph_layout in the UI
         self.imv = pg.ImageView()
