@@ -71,7 +71,7 @@ class SpimMeasure(Measurement):
         self.settings.mip_type.connect_to_widget(self.ui.mip_selector)
         self.settings.save_type.connect_to_widget(self.ui.save_selector)
 
-        self.shutter_measure.settings.shutter_check.connect_to_widget(self.ui.shutter_checkbox)
+        self.shutter_measure.shutter_closed.connect_to_widget(self.ui.shutter_checkbox)
 
         # Set up pyqtgraph graph_layout in the UI
         self.imv = pg.ImageView()
@@ -395,8 +395,7 @@ class SpimMeasure(Measurement):
         self.h5_group = h5_io.h5_create_measurement_group(measurement=self, h5group=self.h5file)
 
         img_size = list(self.image_gen.camera.image_size())  # TODO read automatically size and dtype
-        # dtype = 'uint16'
-        dtype = self.img.dtype
+        dtype = 'uint16'
 
         if self.settings['save_type']=='stack' or self.settings['save_type']=='all':
             length = self.length_saving
