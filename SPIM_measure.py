@@ -71,6 +71,8 @@ class SpimMeasure(Measurement):
         self.settings.mip_type.connect_to_widget(self.ui.mip_selector)
         self.settings.save_type.connect_to_widget(self.ui.save_selector)
 
+        self.settings.shutter_check.connect_to_widget(self.ui.shutter_checkbox)
+
         # Set up pyqtgraph graph_layout in the UI
         self.imv = pg.ImageView()
         self.ui.imageLayout.addWidget(self.imv)
