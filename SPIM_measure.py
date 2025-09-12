@@ -406,6 +406,7 @@ class SpimMeasure(Measurement):
                 self.image_h5_ext = t_group.create_dataset(name='c0/image',
                                                     shape=[length, img_size[0], img_size[1]],
                                                     dtype=dtype)
+                #set the attributes in order to be read by fiji
                 self.image_h5_ext.attrs['element_size_um'] = [self.settings['zsampling'], self.settings['ysampling'],
                                                         self.settings['xsampling']]
 
