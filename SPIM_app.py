@@ -14,7 +14,7 @@ def add_path(path):
     sys.path.append(os.path.abspath(os.path.join(dirname(dirname(__file__)),path)))
 
 
-
+#add your Pi model and serial number
 SERIAL = {'M-403.4DG': '0115500028',  # SPIM translator stage
           'V-524.1AA': '0119024343',  # voice coil
           }

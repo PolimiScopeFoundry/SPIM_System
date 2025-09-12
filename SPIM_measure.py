@@ -23,16 +23,18 @@ class SpimMeasure(Measurement):
         self.settings.New('Z_series', dtype=int, initial=10)
         self.settings.New('Time_series', dtype=int, initial=1)
 
-        self.settings.New('Measurement time', dtype=float, unit='s', initial=0)
-        # self.settings.New('Acquisition time', dtype=float, unit='s', initial=0)
+        self.settings.New('Measurement time', dtype=float, unit='s', initial=0, ro=False)
+        # self.settings.New('Acquisition time', dtype=float, unit='s',
+        #                   initial=self.settings['Z_series'] *  self.image_gen.exposure_time,
+        #                   ro=True)
 
         # how often we want to update the display
         self.settings.New('refresh_period', dtype=float, unit='s', spinbox_decimals=3, initial=0.05, vmin=0)
 
         #RISOLUZIONE: dimensione del pixel della camera e sella profondità in z
-        self.settings.New('xsampling', dtype=float, unit='um', initial=0.65)
-        self.settings.New('ysampling', dtype=float, unit='um', initial=0.65)
-        self.settings.New('zsampling', dtype=float, unit='um', initial=10)
+        self.settings.New('xsampling', dtype=float, unit='um', initial=0.65, ro=False)
+        self.settings.New('ysampling', dtype=float, unit='um', initial=0.65, ro=False)
+        self.settings.New('zsampling', dtype=float, unit='um', initial=10, ro=False)
 
         self.auto_range = self.settings.New('auto_range', dtype=bool, initial=True)
         self.settings.New('auto_levels', dtype=bool, initial=True)
@@ -50,6 +52,7 @@ class SpimMeasure(Measurement):
         self.image_gen = self.app.hardware['NeoAndorHW']
         self.stage = self.app.hardware['PI_CG_HW']
         self.shutter_measure = self.app.hardware['Shutter']
+
 
     def setup_figure(self):
         """
@@ -129,14 +132,13 @@ class SpimMeasure(Measurement):
                 self.imv.setLevels(min=self.settings['level_min'],
                                    max=self.settings['level_max'])
                 
-        if hasattr(self, 'meanIP_img') and hasattr(self, 'max_img'):
-
+        if hasattr(self, 'meanIP_img') or hasattr(self, 'max_img'):
             if self.settings['mip_type'] == 'max': 
                 mip_to_show = self.maxIP_img
             elif self.settings['mip_type'] == 'mean': 
                 mip_to_show = self.meanIP_img
 
-            self.imv.setImage(mip_to_show,               
+            self.mip_imv.setImage(mip_to_show,
                               autoLevels=True,
                               autoRange=self.auto_range.val,
                               levelMode='mono'
@@ -187,8 +189,8 @@ class SpimMeasure(Measurement):
             self.stage.motor.set_velocity(velocity)
             self.stage.motor.move_absolute(stop)
 
-            maxIP_img = np.zeros(w,h)
-            meanIP_img = np.zeros(w,h)
+            maxIP_img = np.zeros((h,w))
+            meanIP_img = np.zeros((h,w))
 
 
             for frame_idx_ext in range(0, space_frame):
@@ -211,23 +213,22 @@ class SpimMeasure(Measurement):
                 self.meanIP = meanIP_img
                 self.img = img
 
-
-
                 if self.settings['save_type']=='stack' or self.settings['save_type']=='all':
                     # access the group and save the image
                     t_group = self.h5_group[f't{time_idx}']
                     self.image_h5_ext = t_group['c0/image']
-                    self.image_h5_ext[frame_idx_ext, :, :] = img
+                    self.image_h5_ext[frame_idx_ext, :, :] = img.T
                     self.h5file.flush()
-
 
                 if self.interrupt_measurement_called:
                     self.shutter_measure.shutter.close_shutter()
                     break
 
             if self.settings['save_type']=='mip' or self.settings['save_type']=='all':
-                self.image_mip_max[time_idx,:,:] = maxIP_img
-                self.image_mip_mean[time_idx,:,:] = meanIP_img
+                MIP_group = self.h5_group['mip']
+                self.image_mip_max = MIP_group['c0/MIP_max']
+                self.image_mip_max[time_idx,:,:] = maxIP_img.T
+                self.image_mip_mean[time_idx,:,:] = meanIP_img.T
                 self.h5file.flush()
 
 
@@ -255,9 +256,6 @@ class SpimMeasure(Measurement):
         # print('mean saving time', np.mean(time_acq[:,1]))
         self.image_gen.camera.acquisition_stop()
         self.shutter_measure.shutter.close_shutter()
-
-        # create mip
-        # self.create_MIP(time_frame)
 
         # make sure to close the data file
         self.h5file.close()
@@ -389,13 +387,14 @@ class SpimMeasure(Measurement):
             sample_name = '_'.join([timestamp, self.name])
         else:
             sample_name = '_'.join([timestamp, self.name, sample])
-        #ho modificato
+
         self.fname = os.path.join(self.app.settings['save_dir'], sample_name + '.h5')
 
         self.h5file = h5_io.h5_base_file(app=self.app, measurement=self, fname=self.fname)
         self.h5_group = h5_io.h5_create_measurement_group(measurement=self, h5group=self.h5file)
 
-        img_size = list(self.image_gen.camera.image_size())  # TODO read automatically size and dtype
+        img_size = list(self.image_gen.camera.image_size())
+        # terrible but there is no other way as the image is created later
         dtype = 'uint16'
 
         if self.settings['save_type']=='stack' or self.settings['save_type']=='all':
@@ -410,39 +409,16 @@ class SpimMeasure(Measurement):
                 self.image_h5_ext.attrs['element_size_um'] = [self.settings['zsampling'], self.settings['ysampling'],
                                                         self.settings['xsampling']]
 
-        elif self.settings['save_type']=='mip' or self.settings['save_type']=='all':
-            mip_group = self.h5_group.create_group('mip') #TODO check id this group is visible in Fiji. The name mip is not standard. standard is t0/c0 ...
-
+        if self.settings['save_type']=='mip' or self.settings['save_type']=='all':
+            mip_group = self.h5_group.create_group('mip')
+            #no possibilities to save the time as attr
             self.image_mip_max = mip_group.create_dataset(name='c0/MIP_max',
                                                         shape=[t_frame, img_size[0], img_size[1]],
                                                         dtype=dtype)
-            self.image_mip_max.attrs['element_size_s'] = [self.settings['zsampling'], self.settings['ysampling'],
-                                                        self.settings['xsampling']] #TODO check time_sampling
+            self.image_mip_max.attrs['element_size_um'] = [0, self.settings['ysampling'],
+                                                        self.settings['xsampling']]
             self.image_mip_mean = mip_group.create_dataset(name='c0/MIP_mean',
                                                         shape=[t_frame,img_size[0], img_size[1]],
                                                         dtype=dtype)
-            self.image_mip_mean.attrs['element_size_s'] = [self.settings['zsampling'], self.settings['ysampling'],
-                                                      self.settings['xsampling']] #TODO check time_sampling
-
-
-
-
-
-    def create_MIP(self, t_frame):
-        hdf5_folder = self.app.settings['save_dir']
-        hdf5_path = os.path.join(hdf5_folder, self.fname)
-
-        dataset_name = 'c0/image'
-        for time_idx in range(0, t_frame):
-            group_name = f'/measurement/SPIM_measure/t{time_idx}'
-            # print('greoup name ', group_name)
-            with h5py.File(hdf5_path, 'r') as hf:
-                # Load the image stack
-                image_dataset = hf[f'{group_name}/{dataset_name}']
-                image_stack = image_dataset[:]
-
-            mip = np.max(image_stack, axis=0)
-            t_group = self.h5_group[f't{time_idx}']
-            self.image_mip = t_group['c0/MIP']
-            self.image_mip[:, :] = mip
-            self.h5file.flush()
+            self.image_mip_mean.attrs['element_size_um'] = [0, self.settings['ysampling'],
+                                                      self.settings['xsampling']]
