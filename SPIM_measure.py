@@ -394,8 +394,6 @@ class SpimMeasure(Measurement):
         self.h5_group = h5_io.h5_create_measurement_group(measurement=self, h5group=self.h5file)
 
         img_size = list(self.image_gen.camera.image_size())
-        # terrible but there is no other way as the image is created later
-        dtype = 'uint16'
 
         if self.settings['save_type']=='stack' or self.settings['save_type']=='all':
             length = self.length_saving
@@ -405,21 +403,40 @@ class SpimMeasure(Measurement):
 
                 self.image_h5_ext = t_group.create_dataset(name='c0/image',
                                                     shape=[length, img_size[0], img_size[1]],
-                                                    dtype=dtype)
+                                                    dtype='uint16')
                 #set the attributes in order to be read by fiji
                 self.image_h5_ext.attrs['element_size_um'] = [self.settings['zsampling'], self.settings['ysampling'],
                                                         self.settings['xsampling']]
 
         if self.settings['save_type']=='mip' or self.settings['save_type']=='all':
             mip_group = self.h5_group.create_group('mip')
-            #no possibilities to save the time as attr
-            self.image_mip_max = mip_group.create_dataset(name='c0/MIP_max',
-                                                        shape=[t_frame, img_size[0], img_size[1]],
-                                                        dtype=dtype)
-            self.image_mip_max.attrs['element_size_um'] = [0, self.settings['ysampling'],
-                                                        self.settings['xsampling']]
-            self.image_mip_mean = mip_group.create_dataset(name='c0/MIP_mean',
-                                                        shape=[t_frame,img_size[0], img_size[1]],
-                                                        dtype=dtype)
-            self.image_mip_mean.attrs['element_size_um'] = [0, self.settings['ysampling'],
-                                                      self.settings['xsampling']]
+
+            time_lapse_length = self.settings['Time_series']
+            length = self.settings['Z_series']      #TODO: check
+            self.images_h5 = []
+            for tl_idx in range(time_lapse_length):
+                self.image_mip_max = mip_group.create_dataset(name=f't{tl_idx}/c0/MIP_max',
+                                                       shape=[length, img_size[0], img_size[1]],
+                                                       dtype='uint16')
+                self.image_mip_max.attrs['element_size_um'] = [1, self.settings['ysampling'],
+                                                    self.settings['xsampling']]
+                self.images_h5.append(self.image_mip_max.attrs)
+
+                self.image_mip_mean = mip_group.create_dataset(name=f't{tl_idx}/c0/MIP_mean',
+                                                       shape=[length, img_size[0], img_size[1]],
+                                                       dtype='uint16')
+                self.image_mip_mean.attrs['element_size_um'] = [1, self.settings['ysampling'],
+                                                    self.settings['xsampling']]
+                self.images_h5.append(self.image_mip_mean.attrs)
+
+            # #no possibilities to save the time as attr
+            # self.image_mip_max = mip_group.create_dataset(name='c0/MIP_max',
+            #                                             shape=[t_frame, img_size[0], img_size[1]],
+            #                                             dtype=dtype)
+            # self.image_mip_max.attrs['element_size_um'] = [0, self.settings['ysampling'],
+            #                                             self.settings['xsampling']]
+            # self.image_mip_mean = mip_group.create_dataset(name='c0/MIP_mean',
+            #                                             shape=[t_frame,img_size[0], img_size[1]],
+            #                                             dtype=dtype)
+            # self.image_mip_mean.attrs['element_size_um'] = [0, self.settings['ysampling'],
+            #                                           self.settings['xsampling']]
