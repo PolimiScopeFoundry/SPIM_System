@@ -412,7 +412,7 @@ class SpimMeasure(Measurement):
             mip_group = self.h5_group.create_group('mip')
 
             time_lapse_length = self.settings['Time_series']
-            length = self.settings['Z_series']      #TODO: check
+            length = self.settings['Z_series']      #TODO: fix, it gives error
             self.images_h5 = []
             for tl_idx in range(time_lapse_length):
                 self.image_mip_max = mip_group.create_dataset(name=f't{tl_idx}/c0/MIP_max',
