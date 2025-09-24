@@ -43,7 +43,6 @@ class SpimMeasure(Measurement):
 
         self.mip_type=self.settings.New(name='mip_type',dtype=str, choices=['mean', 'max'], initial = 'max', ro=False)
         self.save_type=self.settings.New(name='save_type',dtype=str, choices=['stack','mip','all'], initial = 'mip', ro=False)
-    
 
         '''AGGIUNGI UN BOTTONE:
         self.add_operation('name',op_func)
@@ -69,7 +68,6 @@ class SpimMeasure(Measurement):
         self.settings.auto_range.connect_to_widget(self.ui.autoRange_checkbox)
         self.settings.level_min.connect_to_widget(self.ui.min_doubleSpinBox)
         self.settings.level_max.connect_to_widget(self.ui.max_doubleSpinBox)
-
 
         self.settings.mip_type.connect_to_widget(self.ui.mip_selector)
         self.settings.save_type.connect_to_widget(self.ui.save_selector)
@@ -113,7 +111,6 @@ class SpimMeasure(Measurement):
 
         self.display_update_period = self.settings['refresh_period']
 
-        # self.settings['progress'] = (self.frame_index + 1) * 100 / self.length
         self.settings['progress'] = self.frame_index * 100 / self.length
 
         if hasattr(self, 'img'):
@@ -132,7 +129,7 @@ class SpimMeasure(Measurement):
                 self.imv.setLevels(min=self.settings['level_min'],
                                    max=self.settings['level_max'])
                 
-        if hasattr(self, 'meanIP_img') or hasattr(self, 'max_img'):
+        if hasattr(self, 'meanIP_img') or hasattr(self, 'maxIP_img'):
             if self.settings['mip_type'] == 'max': 
                 mip_to_show = self.maxIP_img
             elif self.settings['mip_type'] == 'mean': 
@@ -174,7 +171,7 @@ class SpimMeasure(Measurement):
 
         self.length = num_frame = space_frame * time_frame
 
-        self.create_h5_file_ext(time_frame)
+        self.create_h5_file()
 
         self.image_gen.camera.acquisition_setup(num_frame)
         self.image_gen.camera.acquisition_start()
@@ -191,7 +188,6 @@ class SpimMeasure(Measurement):
 
             maxIP_img = np.zeros((h,w))
             meanIP_img = np.zeros((h,w))
-
 
             for frame_idx_ext in range(0, space_frame):
                 t1 = time.perf_counter()
@@ -210,7 +206,7 @@ class SpimMeasure(Measurement):
                 # print('saving timing: ', time_save[frame_idx_ext, 0])
 
                 self.maxIP_img = maxIP_img
-                self.meanIP = meanIP_img
+                self.meanIP_img = meanIP_img
                 self.img = img
 
                 if self.settings['save_type']=='stack' or self.settings['save_type']=='all':
@@ -231,7 +227,6 @@ class SpimMeasure(Measurement):
                 self.image_mip_mean[time_idx,:,:] = meanIP_img.T
                 self.h5file.flush()
 
-
             self.stage.motor.set_velocity(2.5)
             self.stage.motor.move_absolute(start)
 
@@ -242,11 +237,11 @@ class SpimMeasure(Measurement):
             # in case you want to do a timelapse
             if measure_time > time_tot[time_idx, 0]:
                 self.shutter_measure.shutter.close_shutter()
-                wait_frame = measure_time-time_tot[time_idx, 0]
+                wait_frame = measure_time - time_tot[time_idx, 0]
                 time.sleep(wait_frame)
                 self.shutter_measure.shutter.open_shutter()
 
-        x = np.arange(num_frame)
+        # x = np.arange(num_frame)
         # print(time_acq)
 
         # print('mean delay: ', np.mean(time_save))
@@ -280,7 +275,7 @@ class SpimMeasure(Measurement):
 
         self.length = num_frame = space_frame * time_frame
 
-        self.create_h5_file_ext(time_frame)
+        self.create_h5_file()
 
         self.image_gen.camera.acquisition_setup(num_frame)
         self.image_gen.camera.acquisition_start()
@@ -373,15 +368,15 @@ class SpimMeasure(Measurement):
                 self.settings['save_h5'] = False
 
     def create_saving_directory(self):
-
         if not os.path.isdir(self.app.settings['save_dir']):
             os.makedirs(self.app.settings['save_dir'])
 
-    def create_h5_file_ext(self, t_frame):
+    def create_h5_file(self):
         self.create_saving_directory()
         # file name creation
         timestamp = time.strftime("%y%m%d_%H%M%S", time.localtime())
         sample = self.app.settings['sample']
+        t_frame = self.settings['Time_series']
         # sample_name = f'{timestamp}_{self.name}_{sample}.h5'
         if sample == '':
             sample_name = '_'.join([timestamp, self.name])
@@ -411,32 +406,13 @@ class SpimMeasure(Measurement):
         if self.settings['save_type']=='mip' or self.settings['save_type']=='all':
             mip_group = self.h5_group.create_group('mip')
 
-            time_lapse_length = self.settings['Time_series']
-            length = self.settings['Z_series']      #TODO: fix, it gives error
-            self.images_h5 = []
-            for tl_idx in range(time_lapse_length):
-                self.image_mip_max = mip_group.create_dataset(name=f't{tl_idx}/c0/MIP_max',
-                                                       shape=[length, img_size[0], img_size[1]],
-                                                       dtype='uint16')
-                self.image_mip_max.attrs['element_size_um'] = [1, self.settings['ysampling'],
-                                                    self.settings['xsampling']]
-                self.images_h5.append(self.image_mip_max.attrs)
-
-                self.image_mip_mean = mip_group.create_dataset(name=f't{tl_idx}/c0/MIP_mean',
-                                                       shape=[length, img_size[0], img_size[1]],
-                                                       dtype='uint16')
-                self.image_mip_mean.attrs['element_size_um'] = [1, self.settings['ysampling'],
-                                                    self.settings['xsampling']]
-                self.images_h5.append(self.image_mip_mean.attrs)
-
-            # #no possibilities to save the time as attr
-            # self.image_mip_max = mip_group.create_dataset(name='c0/MIP_max',
-            #                                             shape=[t_frame, img_size[0], img_size[1]],
-            #                                             dtype=dtype)
-            # self.image_mip_max.attrs['element_size_um'] = [0, self.settings['ysampling'],
-            #                                             self.settings['xsampling']]
-            # self.image_mip_mean = mip_group.create_dataset(name='c0/MIP_mean',
-            #                                             shape=[t_frame,img_size[0], img_size[1]],
-            #                                             dtype=dtype)
-            # self.image_mip_mean.attrs['element_size_um'] = [0, self.settings['ysampling'],
-            #                                           self.settings['xsampling']]
+            self.image_mip_max = mip_group.create_dataset(name='c0/MIP_max',
+                                                        shape=[t_frame, img_size[0], img_size[1]],
+                                                        dtype='uint16')
+            self.image_mip_max.attrs['element_size_um'] = [1, self.settings['ysampling'],
+                                                        self.settings['xsampling']]
+            self.image_mip_mean = mip_group.create_dataset(name='c0/MIP_mean',
+                                                        shape=[t_frame,img_size[0], img_size[1]],
+                                                        dtype='uint16')
+            self.image_mip_mean.attrs['element_size_um'] = [1, self.settings['ysampling'],
+                                                      self.settings['xsampling']]
