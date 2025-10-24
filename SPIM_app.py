@@ -38,9 +38,11 @@ class SPIM_app(BaseMicroscopeApp):
 
         print("Adding Translator Hardware Components")
         add_path('PI_ScopeFoundry')
-        from PI_CG_hardware import PI_CG_HW
-        self.add_hardware(PI_CG_HW(self, serial='0115500028'))
-         
+        # from PI_CG_hardware import PI_CG_HW
+        # self.add_hardware(PI_CG_HW(self, serial='0115500028'))
+        from PI_hardware import PI_HW
+        self.add_hardware(PI_HW(self, serial='0119024343'))   #voice coil
+
         # Add measurement components
         print("Create Measurement objects")
         from SPIM_measure import SpimMeasure
@@ -52,13 +54,13 @@ if __name__ == '__main__':
     app = SPIM_app(sys.argv)
 
     # current file dir and select settings file:
-    path = os.path.dirname(os.path.realpath(__file__))
-    new_path = os.path.join(path, 'Settings', 'Settings.ini')
-    print(new_path)
-
-    app.settings_load_ini(new_path)
-    # connect all the hardwares
-    for hc_name, hc in app.hardware.items():
-        hc.settings['connected'] = True
+    # path = os.path.dirname(os.path.realpath(__file__))
+    # new_path = os.path.join(path, 'Settings', 'Settings.ini')
+    # print(new_path)
+    #
+    # app.settings_load_ini(new_path)
+    # # connect all the hardwares
+    # for hc_name, hc in app.hardware.items():
+    #     hc.settings['connected'] = True
 
     sys.exit(app.exec_())

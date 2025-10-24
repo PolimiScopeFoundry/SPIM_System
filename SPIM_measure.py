@@ -261,8 +261,8 @@ class SpimMeasure(Measurement):
         self.stage.read_from_hardware()
         self.image_gen.read_from_hardware()
 
-        self.stage.motor.go_home()
-        self.stage.motor.wait_on_target()
+        correction = 0.01
+        self.stage.motor.move_absolute(-correction)
 
         print('start: ', self.stage.motor.get_position())
 
@@ -277,6 +277,8 @@ class SpimMeasure(Measurement):
 
         self.create_h5_file()
 
+        self.stage.motor.before_trigger()
+
         self.image_gen.camera.acquisition_setup(num_frame)
         self.image_gen.camera.acquisition_start()
 
@@ -284,11 +286,10 @@ class SpimMeasure(Measurement):
         t = time.perf_counter()
         for time_idx in range(time_frame):
             if time_idx % 2 == 0:
-                t_end = step_length*space_frame+0.5
-                self.stage.motor.trigger(step_length, t_end)
+                t_end = step_length * space_frame
+                self.stage.motor.trigger(step_length, 0, t_end, correction)
             else:
-                t_end = -0.5
-                self.stage.motor.trigger(-step_length, t_end)
+                self.stage.motor.trigger(step_length, t_end, 0, -correction)
 
             for frame_idx in range(space_frame):
                 t1 = time.perf_counter()
