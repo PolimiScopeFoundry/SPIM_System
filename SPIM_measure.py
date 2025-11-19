@@ -49,7 +49,7 @@ class SpimMeasure(Measurement):
         example: self.add_operation('measure',self.measure)'''
 
         self.image_gen = self.app.hardware['NeoAndorHW']
-        self.stage = self.app.hardware['PI_CG_HW']
+        self.stage = self.app.hardware['PI_HW']
         self.shutter_measure = self.app.hardware['Shutter']
 
 

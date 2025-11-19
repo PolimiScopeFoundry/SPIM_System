@@ -38,10 +38,10 @@ class SPIM_app(BaseMicroscopeApp):
 
         print("Adding Translator Hardware Components")
         add_path('PI_ScopeFoundry')
-        # from PI_CG_hardware import PI_CG_HW
-        # self.add_hardware(PI_CG_HW(self, serial='0115500028'))
         from PI_hardware import PI_HW
-        self.add_hardware(PI_HW(self, serial='0119024343'))   #voice coil
+        self.add_hardware(PI_HW(self, serial='0115500028', encoder='CG'))
+        #voice coil
+        # self.add_hardware(PI_HW(self, serial='0119024343', encoder='VC'))
 
         # Add measurement components
         print("Create Measurement objects")
