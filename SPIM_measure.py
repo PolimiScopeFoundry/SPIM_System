@@ -262,42 +262,45 @@ class SpimMeasure(Measurement):
         self.image_gen.read_from_hardware()
 
         correction = 0.01
+        ch = 4
+        ch_tot = 6
         self.stage.motor.move_absolute(-correction)
 
         print('start: ', self.stage.motor.get_position())
 
+        start_pos = 0
         step_length = self.settings['Z_step'] * 0.001
-        self.length_saving = space_frame = self.settings['Z_series']
-        time_frame = self.settings['Time_series']
+        self.length_saving = step_num = self.settings['Z_series']
+        time_num = self.settings['Time_series']
+        stop_pos = step_length * step_num
 
         if not self.speed_check(step_length):
             return
 
-        self.length = num_frame = space_frame * time_frame
+        self.length = num_frame = step_num * time_num
 
         self.create_h5_file()
-
-        self.stage.motor.before_trigger()
 
         self.image_gen.camera.acquisition_setup(num_frame)
         self.image_gen.camera.acquisition_start()
 
         self.frame_index = 0
         t = time.perf_counter()
-        for time_idx in range(time_frame):
+        for time_idx in range(time_num):
             if time_idx % 2 == 0:
-                t_end = step_length * space_frame
-                self.stage.motor.trigger(step_length, 0, t_end, correction)
+                self.stage.motor.trigger(step_length, start_pos, stop_pos, correction)
+                self.stage.motor.move_absolute(stop_pos + correction)
             else:
-                self.stage.motor.trigger(step_length, t_end, 0, -correction)
+                self.stage.motor.trigger(step_length, stop_pos, start_pos, -correction)
+                self.stage.motor.move_absolute(start_pos - correction)
 
-            for frame_idx in range(space_frame):
+            for frame_idx in range(step_num):
                 t1 = time.perf_counter()
                 self.frame_index += 1
                 if time_idx % 2 == 0:
                     self.frame_index_saving = frame_idx
                 else:
-                    self.frame_index_saving = space_frame - frame_idx - 1
+                    self.frame_index_saving = step_num - frame_idx - 1
 
                 print(self.frame_index_saving)
 
