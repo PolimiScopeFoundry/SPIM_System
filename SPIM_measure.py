@@ -276,16 +276,145 @@ class SpimMeasure(Measurement):
         stop_pos = step_length * step_num
         measure_time = self.settings['Measurement time']
 
-        time_exp = self.image_gen.exposure_time.value + 0.01
-        velocity = self.stage.motor.PI_velocity(time_exp, step_length)
+        time_exp = self.image_gen.exposure_time.value
+        if time_exp > 0.13:
+            velocity = self.stage.motor.PI_velocity(time_exp, step_length)
+        else:
+            velocity = self.stage.motor.PI_velocity(0.13, step_length)
         self.stage.motor.set_velocity(velocity)
+        print('velocity: ', velocity)
 
         hstart, hend, vstart, vend, hbin, vbin = self.image_gen.camera.roi_get()
         w = hend - hstart
         h = vend - vstart
 
-        # if not self.speed_check(step_length):
-        #     return
+        interrupt_flag = self.interrupt_measurement_called
+        shutter = self.shutter_measure.shutter
+
+        self.length = num_frame = step_num * time_num
+
+        self.create_h5_file()
+
+        self.image_gen.camera.acquisition_setup(num_frame)
+        self.image_gen.camera.acquisition_start()
+
+        self.frame_index = 0
+        time_tot = np.zeros(shape=(time_num, 1))
+        shutter.open_shutter()
+        cam = self.image_gen.camera
+        print('numero timelapse: ', time_num)
+        print('numero di step: ', step_num)
+        for time_idx in range(time_num):
+            t0 = time.perf_counter()
+            reverse = (time_idx % 2 != 0)
+            inv_step_num = 1.0 / step_num
+
+            if not reverse:
+                self.stage.motor.trigger(step_length, start_pos, stop_pos, ch, ch_tot)
+                self.stage.motor.move_absolute(stop_pos + correction)
+            else:
+                self.stage.motor.trigger(step_length, stop_pos, start_pos, ch, ch_tot)
+                self.stage.motor.move_absolute(start_pos - correction)
+
+            maxIP_img = np.zeros((h,w), dtype=np.float32)
+            meanIP_img = np.zeros((h,w), dtype=np.float32)
+
+            stack_img = np.zeros((step_num, h, w), dtype=np.float32)
+            # print('time index: ', time_idx)
+            t_each_frame = np.zeros(step_num)
+
+            for frame_idx in range(step_num):
+                # print('frame index: ', frame_idx)
+                t_frame_start = time.perf_counter()
+
+                cam.image_wait()
+                img = cam.image_read()
+
+                np.maximum(maxIP_img, img, out=maxIP_img)
+                meanIP_img += img * inv_step_num
+
+                if not reverse:
+                    stack_img[frame_idx] = img
+                else:
+                    stack_img[step_num - frame_idx - 1] = img
+
+                if interrupt_flag:
+                    shutter.close_shutter()
+                    break
+
+                self.img = img
+
+                t_each_frame[frame_idx]= time.perf_counter()-t_frame_start
+
+            #TODO: sistemare la barra con frame_index. lo aggiornerei solo alla fine dello stack
+            self.frame_index = num_frame
+            self.maxIP_img = maxIP_img
+            self.meanIP_img = meanIP_img
+            # self.img = stack_img[step_num]
+            print('required time: ', np.mean(t_each_frame))
+            if self.settings['save_type'] in ['stack', 'all']:
+                t_group = self.h5_group[f't{time_idx}']
+                self.image_h5_ext = t_group['c0/image']
+
+                # scrittura BULK (molto veloce)
+                self.image_h5_ext[:, :, :] = stack_img.transpose(0, 2, 1)
+                self.h5file.flush()
+
+            if self.settings['save_type'] == 'mip' or self.settings['save_type'] == 'all':
+                MIP_group = self.h5_group['mip']
+                self.image_mip_max = MIP_group['c0/MIP_max']
+                self.image_mip_max[time_idx, :, :] = maxIP_img.T
+                self.image_mip_mean[time_idx, :, :] = meanIP_img.T
+                self.h5file.flush()
+
+            time_tot[time_idx, 0] = time.perf_counter() - t0
+
+        print('total time: ', time_tot)
+        # in case you want to do a timelapse
+        if measure_time > time_tot[time_idx, 0]:
+            shutter.close_shutter()
+            wait_frame = measure_time - time_tot[time_idx, 0]
+            time.sleep(wait_frame)
+            shutter.open_shutter()
+
+        cam.acquisition_stop()
+        shutter.close_shutter()
+
+        # make sure to close the data file
+        self.h5file.close()
+        self.settings['save_h5'] = False
+
+## without using RAM
+    def measure_ext_noRAM(self):
+        self.stage.read_from_hardware()
+        self.image_gen.read_from_hardware()
+        self.shutter_measure.read_from_hardware()
+
+        correction = 0.01
+        ch = 4
+        ch_tot = 6
+        self.stage.motor.move_absolute(-correction)
+
+        print('start: ', self.stage.motor.get_position())
+
+        start_pos = 0
+        step_length = self.settings['Z_step'] * 0.001
+        self.length_saving = step_num = self.settings['Z_series']
+        time_num = self.settings['Time_series']
+        stop_pos = step_length * step_num
+        measure_time = self.settings['Measurement time']
+
+        time_exp = self.image_gen.exposure_time.value
+        if time_exp > 0.2:
+            velocity = self.stage.motor.PI_velocity(time_exp, step_length)
+        else:
+            velocity = self.stage.motor.PI_velocity(0.1, step_length)
+        self.stage.motor.set_velocity(velocity)
+        print('velocity: ', velocity)
+
+        hstart, hend, vstart, vend, hbin, vbin = self.image_gen.camera.roi_get()
+        w = hend - hstart
+        h = vend - vstart
 
         self.length = num_frame = step_num * time_num
 
@@ -322,10 +451,6 @@ class SpimMeasure(Measurement):
                 self.image_gen.camera.image_wait()
                 img = self.image_gen.camera.image_read()
 
-                # time_acq[frame_idx_ext,0] = time.perf_counter() - t1
-                # print('acquisition time: ', t_acq)
-                # t2 = time.perf_counter()
-
                 maxIP_img = np.maximum(maxIP_img, img)
                 meanIP_img += img / step_num
 
@@ -336,6 +461,8 @@ class SpimMeasure(Measurement):
                 self.meanIP_img = meanIP_img
                 self.img = img
 
+                t_start_saving = time.perf_counter()
+
                 if self.settings['save_type'] == 'stack' or self.settings['save_type'] == 'all':
                     # access the group and save the image
                     t_group = self.h5_group[f't{time_idx}']
@@ -343,12 +470,15 @@ class SpimMeasure(Measurement):
                     self.image_h5_ext[frame_idx, :, :] = img.T
                     self.h5file.flush()
 
+                t_stop_saving = time.perf_counter()
+
                 if self.interrupt_measurement_called:
                     self.shutter_measure.shutter.close_shutter()
                     break
 
                 t_frame_stop = time.perf_counter()
                 print('required time: ', t_frame_stop-t_frame_start)
+                print('saving time: ', t_stop_saving - t_start_saving)
 
             if self.settings['save_type'] == 'mip' or self.settings['save_type'] == 'all':
                 MIP_group = self.h5_group['mip']
@@ -398,7 +528,11 @@ class SpimMeasure(Measurement):
                     if self.image_gen.settings['trigger'] == 'int':
                         self.measure()
                     elif self.image_gen.settings['trigger'] == 'ext':
-                        self.measure_ext()
+                        busy_RAM = 20 * self.settings['Z_series'] * self.settings['Z_step']
+                        if busy_RAM > 10000:
+                            self.measure_ext_noRAM()
+                        else:
+                            self.measure_ext()
                     break
 
                 self.image_gen.camera.image_wait()
